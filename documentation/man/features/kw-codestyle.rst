@@ -9,6 +9,8 @@ SYNOPSIS
 | *kw* (*c* | *codestyle*)
 | *kw* (*c* | *codestyle*) [<directory> | <file> | <patch>]
 | *kw* (*c* | *codestyle*) [\--verbose] [<directory> | <file> | <patch>]
+| *kw* (*c* | *codestyle*) [\--start-line] [<line number>] [<file>]
+| *kw* (*c* | *codestyle*) [\--end-line] [<line number>] [<file>]
 
 DESCRIPTION
 ===========
@@ -27,6 +29,16 @@ OPTIONS
 \--verbose:
   Display commands executed under the hood.
 
+\--start-line:
+  Define the line where **checkpatch** will start searching for code-style
+  issues in a file. If no **--start-line** is defined, defaults to the first
+  line of the file being checked.
+
+\--end-line:
+  Define the line where **checkpatch** will stop searching for code-style
+  issues in a file. If no **--end-line** is defined, defaults to the last
+  line of the file being checked.
+
 EXAMPLES
 ========
 For these examples, we assume that the relevant fields in your configuration 
@@ -38,3 +50,21 @@ For checking the code style::
   cd <kernel-path>
   kw c drivers/iio/dummy/
   kw c drivers/iio/dummy/iio_simple_dummy.c
+
+For checking the code style in the line interval starting from line 50 until
+the last line of a file::
+
+  cd <kernel-path>
+  kw c --start-line 50 drivers/iio/dummy/iio_simple_dummy.c
+
+For checking the code style in the line interval starting from the first line
+until line 100 of a file::
+
+  cd <kernel-path>
+  kw c --end-line 100 drivers/iio/dummy/iio_simple_dummy.c
+
+For checking the code style in the line interval starting from line 50 until
+line 100 of a file::
+
+  cd <kernel-path>
+  kw c --start-line 50 --end-line 100 drivers/iio/dummy/iio_simple_dummy.c

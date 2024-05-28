@@ -19,6 +19,7 @@ function codestyle_main()
   local kernel_root
   local checkpatch
   local cmd_script
+  local checked_snippet_temp_file
 
   parse_codestyle_options "$@"
   if [[ "$?" != 0 ]]; then
@@ -73,6 +74,18 @@ function codestyle_main()
   checkpatch=$(join_path "$kernel_root" 'scripts/checkpatch.pl')
   cmd_script="perl ${checkpatch} ${checkpatch_options}"
 
+  [[ -n "${options_values['START_LINE']}" ]] && start_line=${options_values['START_LINE']}
+  [[ -n "${options_values['END_LINE']}" ]] && end_line=${options_values['END_LINE']}
+
+  if [[ -n "$start_line" || -n "$end_line" ]]; then
+    handle_line_range_option "$start_line" "$end_line" "$path" "$checked_snippet_temp_file"
+    if [[ "$?" == 22 ]]; then
+      return 22
+    else
+      FLIST="$checked_snippet_temp_file"
+    fi
+  fi
+
   for current_file in $FLIST; do
     file="$current_file"
 
@@ -84,6 +97,80 @@ function codestyle_main()
     cmd_manager "$flag" "$cmd_script $file"
     [[ "$?" != 0 ]] && say "$SEPARATOR"
   done
+
+  if [[ -n "$checked_snippet_temp_file" ]]; then
+    is_safe_path_to_remove "$checked_snippet_temp_file"
+    if [[ "$?" == 0 ]]; then
+      rm "$checked_snippet_temp_file"
+    fi
+  fi
+}
+
+# Returns:
+# In case of successful returns 0 and write the temporary file content on $4,
+# otherwise, return 22
+function handle_line_range_option()
+{
+  start_line="$1"
+  end_line="$2"
+  path="$3"
+  checked_snippet_temp_file="$4"
+
+  local file_last_line
+
+  if [[ ! -f "$path" ]]; then
+    complain "Invalid path using --start-line or --end-line options: ${path}"
+    return 22 # EINVAL
+  fi
+  
+  if [[ -n "$start_line" ]]; then
+    # Check if --start-line is used with a valid number
+    if [[ ! "$start_line" =~ ^[0-9]+$ || "$start_line" -lt 1 ]]; then
+      complain "Invalid value for start-line option: ${start_line}"
+      return 22 # EINVAL
+    fi
+  else
+    start_line=1
+  fi
+
+  file_last_line=$(wc --lines < "$path")
+  if [[ -n "$end_line" ]]; then
+    # Check if --end-line is used with a valid number
+    if [[ ! "$end_line" =~ ^[0-9]+$ || "$end_line" -gt "$file_last_line" ]]; then
+      complain "Invalid value for end-line option: ${end_line}"
+      return 22 # EINVAL
+    fi
+  else
+    end_line="$file_last_line"
+  fi
+
+  create_snippet_temp_file "$start_line" "$end_line" "$path" "$checked_snippet_temp_file"
+ 
+  # Write the line interval to the temporary file and return it
+  sed --quiet "${start_line},${end_line}p" "$path" >> "$checked_snippet_temp_file"
+  return 0
+}
+
+# Write the temporary file with blank lines and SPDX License Identifier if needed
+function create_snippet_temp_file()
+{
+  start_line=$1
+  end_line=$2
+  path=$3
+  checked_snippet_temp_file=$4
+
+  local file_suffix
+  local blank_lines
+
+  # Create a temporary file with the line interval and SPDX License Identifier if needed
+  file_suffix=".${path#*.}"
+  checked_snippet_temp_file=$(mktemp --suffix "$file_suffix" --tmpdir="$PWD")
+
+  if [[ "$start_line" != '1' ]]; then
+    printf '%s\n' '// SPDX-License-Identifier: TEMPFILE' > "$checked_snippet_temp_file"
+    ((blank_lines = start_line - 2))
+    yes '' | head --lines "$blank_lines" >> "$checked_snippet_temp_file"
+  fi
 }
 
 # This function gets raw data and based on that fill out the options values to
@@ -93,7 +180,7 @@ function codestyle_main()
 # In case of successful return 0, otherwise, return 22.
 function parse_codestyle_options()
 {
-  local long_options='verbose,help'
+  local long_options='verbose,help,start-line:,end-line:'
   local short_options='h'
   local options
 
@@ -108,6 +195,8 @@ function parse_codestyle_options()
   # Default values
   options_values['VERBOSE']=''
   options_values['TEST_MODE']=''
+  options_values['START_LINE']=''
+  options_values['END_LINE']=''
 
   eval "set -- $options"
 
@@ -116,6 +205,14 @@ function parse_codestyle_options()
       --verbose)
         options_values['VERBOSE']=1
         shift
+        ;;
+      --start-line)
+        options_values['START_LINE']="$2"
+        shift 2
+        ;;
+      --end-line)
+        options_values['END_LINE']="$2"
+        shift 2
         ;;
       TEST_MODE)
         options_values['TEST_MODE']='TEST_MODE'
@@ -145,7 +242,9 @@ function codestyle_help()
   fi
   printf '%s\n' 'kw codestyle:' \
     '  codestyle [<dir>|<file>|<patch>] - Use checkpatch on target' \
-    '  codestyle (--verbose) [<dir>|<file>|<patch>] - Show detailed output'
+    '  codestyle (--verbose) [<dir>|<file>|<patch>] - Show detailed output' \
+    '  codestyle (--start-line <line>) - Set line where the script will start checkpatch' \
+    '  codestyle (--end-line <line>) - Set line where the script will end checkpatch'
 }
 
 load_kworkflow_config
