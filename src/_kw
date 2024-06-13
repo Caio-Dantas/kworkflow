@@ -119,6 +119,7 @@ _kw_codestyle()
     '(--verbose)--verbose[enable verbose mode]' \
     '(--start-line)--start-line[set start line for the checked line interval]' \
     '(--end-line)--end-line[set end line for the checked line interval]' \
+    '(--function)--function[set the function name to be checked]' \
     '(--help)--help[check man page for command]' \
     '(-h)-h[print command arguments]' \
     '(*): :_files'
